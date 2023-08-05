@@ -1,4 +1,4 @@
-# ThirdAI
+# Stock Market Analysis using ThirdAI
 
 
 Use Case: The clear use case for this project is to enable users to extract and query relevant information from PDFs containing stock market data, such as financial reports, earnings statements, or market analysis.
