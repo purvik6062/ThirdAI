@@ -21,152 +21,173 @@ Challenges and Innovative Solutions: Challenges in this project might include ha
 
 
 
-## Prerequisites
+## Installation <a name="installation"></a>
 
-```bash
-pip3 install thirdai --upgrade
-pip3 install thirdai[neural_db]
-pip3 install langchain --upgrade
-pip3 install openai --upgrade
-pip3 install paper-qa --upgrade
+```python
+!pip3 install thirdai --upgrade
+!pip3 install thirdai[neural_db]
+!pip3 install langchain --upgrade
+!pip3 install openai --upgrade
+!pip3 install paper-qa --upgrade
 ```
 
-## Setting Up NeuralDB
+## Setting up the NeuralDB <a name="setting-up-the-neuraldb"></a>
 
-After installing the necessary dependencies, you'll need to set up NeuralDB by activating the licensing and importing the required modules. Here's an example of how to do it:
+Import the required modules and activate your licensing:
 
 ```python
 from thirdai import licensing, neural_db as ndb
 
-licensing.activate("YOUR_LICENSE_KEY")
+licensing.deactivate()
+licensing.activate("1FB7DD-CAC3EC-832A67-84208D-C4E39E-V3")
+```
 
+Then, create a NeuralDB instance with your desired username:
+
+```python
 db = ndb.NeuralDB(user_id="my_user")
 ```
 
-Replace `YOUR_LICENSE_KEY` with your actual ThirdAI license key. The `user_id` parameter can be any username you choose.
+## Loading Base DBs from Bazaar <a name="loading-base-dbs-from-bazaar"></a>
 
-## Using Base and Pre-Indexed DBs
-
-NeuralDB provides a Bazaar with different types of databases you can use as a starting point. You can fetch and load these databases to kickstart your search. Here's how:
+1. Set up a cache directory:
 
 ```python
 import os
-from pathlib import Path
-from thirdai.neural_db import Bazaar
-
 if not os.path.isdir("bazaar_cache"):
     os.mkdir("bazaar_cache")
 
+from pathlib import Path
+from thirdai.neural_db import Bazaar
+
 bazaar = Bazaar(cache_dir=Path("bazaar_cache"))
-bazaar.fetch()
+```
 
-# List available model names
+2. Fetch the available DBs:
+
+```python
+bazaar.fetch()  # Optional: Use filter="model name" to filter by model name.
+```
+
+3. List the available models:
+
+```python
 print(bazaar.list_model_names())
+```
 
-# Load a specific model from the Bazaar
+4. Finally, load a DB:
+
+```python
 db = bazaar.get_model("General QnA")
 ```
 
-## Inserting Files
+## Inserting Files <a name="inserting-files"></a>
 
-You can insert various types of files into NeuralDB, including CSV, PDF, DOCX, and URLs. Here are examples of how to insert different file types:
+Insert various file types into the NeuralDB. Supported formats include CSV, PDF, DOCX, and automatic URL scraping. Here's how to insert CSV and PDF files:
 
 ```python
-from thirdai.neural_db import CSV, PDF, DOCX, URL
 
-# Insert CSV files
-csv_files = ['sample_nda.csv']
-insertable_docs = [CSV(path=file, id_column="DOC_ID", strong_columns=["passage"], weak_columns=["para"], reference_columns=["passage"]) for file in csv_files]
+import nltk
+nltk.download('punkt')
 
-# Insert PDF files
-pdf_files = ['sample_nda.pdf']
-insertable_docs = [PDF(file) for file in pdf_files]
+# For CSV files
+insertable_docs = []
+csv_files = ['Stocks_Dataset.csv']
 
-# Insert DOCX files
-doc_files = ['sample_nda.docx']
-insertable_docs = [DOCX(file) for file in doc_files]
+for file in csv_files:
+    csv_doc = ndb.CSV(
+        path=file,
+        id_column="DOC_ID",
+        strong_columns=["date", "open", "high", "low", "close", "volume", "Name"],
+        weak_columns=["high", "low"],
+        reference_columns=["date", "open", "high", "low", "close", "volume", "Name"])
+    #
+    insertable_docs.append(csv_doc)
 
-# Insert documents from URLs
-valid_url_data = ndb.parsing_utils.recursive_url_scrape(base_url="https://www.thirdai.com/pocketllm/", max_crawl_depth=0)
-insertable_docs = [URL(url, response) for url, response in valid_url_data]
+# For PDF files
+insertable_docs = []
+pdf_files = ['analysis.pdf']
+
+for file in pdf_files:
+    pdf_doc = ndb.PDF(file)
+    insertable_docs.append(pdf_doc)
 ```
 
-## Search
-
-Now, let's perform searches using NeuralDB:
+Insert the documents into the NeuralDB:
 
 ```python
-# Perform a search
-search_results = db.search(query="what is the termination period", top_k=2)
+source_ids = db.insert(insertable_docs, train=True)  # Use train=False for unsupervised insertion
+```
 
-# Print search results
+## Performing Searches <a name="performing-searches"></a>
+
+Search through your documents using natural language queries:
+
+```python
+search_results = db.search(
+    query="what was in the dataset?",
+    top_k=2,
+    on_error=lambda error_msg: print(f"Error! {error_msg}"))
+
 for result in search_results:
     print(result.text)
-    print("************")
+    # print(result.context(radius=1))
+    # print(result.source)
+    # print(result.metadata)
+    print('************')
 ```
 
-## Advanced Features
+## Generating Answers with LangChain <a name="generating-answers-with-langchain"></a>
 
-NeuralDB offers advanced features like text-to-text association and text-to-result association for improving search results. Here's how you can use them:
+Integrate with OpenAI's LangChain to generate answers from retrieved references:
 
-```python
-# Text-to-text association
-db.associate(source="parties involved", target="made by and between")
-
-# Text-to-result association
-db.text_to_result("made by and between", 0)
-
-# Batched versions of association and text-to-result
-db.associate_batch([("parties involved", "made by and between"), ("date of signing", "duly executed")])
-db.text_to_result_batch([("parties involved", 0), ("date of signing", 16)])
-```
-
-## Supervised Training
-
-You can also perform supervised training using NeuralDB:
-
-```python
-sup_files = ['sample_nda_sup.csv']
-
-# Train using supervised data
-db.supervised_train([ndb.Sup(path, query_column="QUERY", id_column="DOC_ID", source_id=source_ids[0]) for path in sup_files])
-```
-
-## Answer Generation with LangChain
-
-You can use LangChain to generate answers based on search results:
+1. Set your OpenAI API key:
 
 ```python
 import os
+os.environ["OPENAI_API_KEY"] = "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"
+```
 
-os.environ["OPENAI_API_KEY"] = "YOUR_OPENAI_API_KEY"
+2. Define LangChain and create a QnA chain:
 
+```python
 from langchain.chat_models import ChatOpenAI
 from paperqa.prompts import qa_prompt
 from paperqa.chains import make_chain
 
-llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.1)
-qa_chain = make_chain(prompt=qa_prompt, llm=llm)
+llm = ChatOpenAI(
+    model_name='gpt-3.5-turbo',
+    temperature=0.1,
+)
 
+qa_chain = make_chain(prompt=qa_prompt, llm=llm)
+```
+
+3. Retrieve references and generate answers:
+
+```python
 def get_references(query):
     search_results = db.search(query, top_k=3)
     references = [result.text for result in search_results]
     return references
 
 def get_answer(query, references):
-    return qa_chain.run(question=query, context='\n\n'.join(references[:3]), answer_length="abt 50 words")
+    return qa_chain.run(question=query, context='\n\n'.join(references[:3]), answer_length="about 50 words")
+
+query = "AIC is formulated as"
+
+references = get_references(query)
+print(references)
 ```
 
-## Loading and Saving
+## Saving and Loading <a name="saving-and-loading"></a>
 
-You can save and load your NeuralDB as follows:
+You can save and load your NeuralDB easily:
 
 ```python
 # Save your DB
-db.save("sample_nda.db")
+db.save("data.db")
 
-# Load from a saved checkpoint
-db.from_checkpoint("sample_nda.db", on_progress=lambda fraction: print(f"{fraction}% done with loading."))
+# Load your DB
+db.from_checkpoint("data.db", on_progress=lambda fraction: print(f"{fraction}% done with loading."))
 ```
-
-That's it! You've now learned the essentials of setting up and using ThirdAI's NeuralDB. Happy searching!
